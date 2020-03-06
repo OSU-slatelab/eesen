@@ -12,7 +12,6 @@ import re
 
 class Constantlr(LRScheduler):
     def __init__(self, config):
-        LRScheduler.__init__(self,config)
         self.__config = config
         self.__lr_rate = self.__config[constants.CONF_TAGS.LR_RATE]
         self.__epoch = 1
@@ -52,7 +51,7 @@ class Constantlr(LRScheduler):
     def get_status(self):
         return self.__status
 
-    def update_lr_rate(self, cv_ters):
+    def update_lr_rate(self, cv_stats):
         self.__epoch = self.__epoch + 1
 
         should_stop = False 

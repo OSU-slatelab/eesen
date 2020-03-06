@@ -79,16 +79,20 @@ def main_parser():
     parser.add_argument('--results_dir', help='log and results dir')
     parser.add_argument('--save_every_batch', default = -1, type=int, help='log and results dir')
     parser.add_argument('--online_storage', default = False, action='store_true', help='online storage (for big datasets to not explode in memory)')
+    parser.add_argument('--verify_file', help = "File containing MDD labels")
 
     #train configuration options
     parser.add_argument('--train_config', help = "model to load for evaluation")
     parser.add_argument('--trained_weights', help = "model to load for evaluation")
 
     #computing options
-    parser.add_argument('--batch_size', default = 32, type=int, help='batch size')
+    parser.add_argument('--batch_size', default = 33, type=int, help='batch size')
     parser.add_argument('--temperature', default = 1, type=float, help='temperature used in softmax')
     parser.add_argument('--use_priors', default = False, action='store_true', help='if --use_priors it will take ')
     parser.add_argument('--compute_ter', default = False, action='store_true', help='if --compute_ter the labels will be taken from data_dir (label_phn.test)and ter will be computed')
+    parser.add_argument('--compute_acc', default = False, action='store_true', help='if --compute_acc the edit distance will be used to determine which word was said')
+
+    parser.add_argument('--alternatives', default = 10)
 
     parser.add_argument('--subsampled_utt', default = 0, type=int, help='if set we will only consider the subsampled selected')
 
@@ -101,22 +105,26 @@ def create_test_config(args, language_scheme):
     #io dir
     config_test[constants.CONFIG_TAGS_TEST.DATA_DIR] = args.data_dir
     config_test[constants.CONFIG_TAGS_TEST.RESULTS_DIR] = args.results_dir
+    config_test[constants.CONFIG_TAGS_TEST.VERIFY_FILE] = args.verify_file
 
     #train configuration
     config_test[constants.CONFIG_TAGS_TEST.TRAINED_WEIGHTS] = args.trained_weights
     config_test[constants.CONFIG_TAGS_TEST.TRAIN_CONFIG] = args.train_config
 
     #computing options
+    config_test[constants.CONF_TAGS.COMPUTE_ACC] = args.compute_acc
     config_test[constants.CONFIG_TAGS_TEST.TEMPERATURE] = args.temperature
     config_test[constants.CONFIG_TAGS_TEST.COMPUTE_TER] = args.compute_ter
     config_test[constants.CONFIG_TAGS_TEST.USE_PRIORS] = args.use_priors
     config_test[constants.CONFIG_TAGS_TEST.BATCH_SIZE] = args.batch_size
     config_test[constants.CONFIG_TAGS_TEST.ONLINE_STORAGE] = args.online_storage
+    config_test[constants.CONFIG_TAGS_TEST.ALTERNATIVES] = args.alternatives
 
     config_test[constants.CONFIG_TAGS_TEST.SUBSAMPLED_UTT] = args.subsampled_utt
 
-    if(config_test[constants.CONFIG_TAGS_TEST.USE_PRIORS]):
-        config_test[constants.CONFIG_TAGS_TEST.PRIORS_SCHEME] = generate_priors(config_test[constants.CONFIG_TAGS_TEST.DATA_DIR], language_scheme)
+    if config_test[constants.CONFIG_TAGS_TEST.USE_PRIORS]:
+        data_dir = config_test[constants.CONFIG_TAGS_TEST.DATA_DIR]
+        config_test[constants.CONFIG_TAGS_TEST.PRIORS_SCHEME] = generate_priors(data_dir, language_scheme)
 
     return config_test
 
@@ -124,28 +132,16 @@ def check_paths(args):
 
     #mandatory
     if not os.path.exists(args.train_config):
-        print("Error: train_config does not correspond to a valid path: "+args.train_config)
-        print(debug.get_debug_info())
-        print("exiting...")
-        sys.exit()
+        raise ValueError("train_config does not correspond to a valid path: "+args.train_config)
 
     if not os.path.exists(args.trained_weights+".index"):
-        print("Error: eval_weights does not correspond to a valid path: "+args.trained_weights)
-        print(debug.get_debug_info())
-        print("exiting...")
-        sys.exit()
+        raise ValueError("eval_weights does not correspond to a valid path: "+args.trained_weights)
 
     if not os.path.exists(args.data_dir):
-        print("Error: test_data does not correspond to a valid path: "+args.data_dir)
-        print(debug.get_debug_info())
-        print("exiting...")
-        sys.exit()
+        raise ValueError("test_data does not correspond to a valid path: "+args.data_dir)
 
-    if(not os.path.exists(args.results_dir)):
-        print("results_dir ("+str(args.result_dirs)+") does not exist")
-        print(debug.get_debug_info())
-        print("exiting...")
-        sys.exit()
+    if not os.path.exists(args.results_dir):
+        raise ValueError("results_dir ("+str(args.result_dirs)+") does not exist")
 
 def count_number_augmented_occurences(batches_id):
 
@@ -173,44 +169,30 @@ def main():
 
     config.update(config_test)
 
-    print(80 * "-")
-    print("reading testing set")
-    print(80 * "-")
-    print(80 * "-")
-    print("test_x:")
-    print(80 * "-")
+    #load test feats
+    test = {}
+    test['x'] = feats_reader_factory.create_reader('test', 'kaldi', config)
+    ids = test['x'].get_batches_id()
 
-    #load training feats
-    test_x = feats_reader_factory.create_reader('test', 'kaldi', config)
+    if config[constants.CONFIG_TAGS_TEST.COMPUTE_TER]:
+        test['y'] = labels_reader_factory.create_reader('labels.test', 'txt', config, ids)
 
-    print(80 * "-")
+    if config[constants.CONF_TAGS.COMPUTE_ACC]:
+        test['alt'] = []
+        for i in range(args.alternatives):
+            test['alt'].append(labels_reader_factory.create_reader('labels.test', 'txt', config, ids, alt=True))
 
-    if(config[constants.CONFIG_TAGS_TEST.COMPUTE_TER]):
-        print(80 * "-")
-        print("test_y (for ter computation):")
-        print(80 * "-")
-        test_y = labels_reader_factory.create_reader('test', 'txt', config, test_x.get_batches_id())
-    else:
-        test_y = None
+    if config[constants.CONFIG_TAGS_TEST.VERIFY_FILE]:
+        test['z'] = labels_reader_factory.create_reader(args.verify_file, 'txt', config, ids)
 
-    if config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_TYPE] \
-            != constants.SAT_TYPE.UNADAPTED:
+    if config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_TYPE] != constants.SAT_TYPE.UNADAPTED:
+        test['sat'] = sat_reader_factory.create_reader('kaldi', config, ids)
 
-        print("tr_sat:")
-        print(80 * "-")
-        tr_sat = sat_reader_factory.create_reader('kaldi', config, test_x.get_batches_id())
-        print(80 * "-")
-
-    else:
-        tr_sat = None
-
-    if(config[constants.CONFIG_TAGS_TEST.ONLINE_STORAGE]):
-        config[constants.CONFIG_TAGS_TEST.COUNT_AUGMENT] = count_number_augmented_occurences(test_x.get_batches_id())
-
-    data=(test_x, test_y, tr_sat)
+    if config[constants.CONFIG_TAGS_TEST.ONLINE_STORAGE]:
+        config[constants.CONFIG_TAGS_TEST.COUNT_AUGMENT] = count_number_augmented_occurences(ids)
 
     eesen = Eesen()
-    eesen.test(data, config)
+    eesen.test(test, config)
 
 if __name__ == "__main__":
     main()

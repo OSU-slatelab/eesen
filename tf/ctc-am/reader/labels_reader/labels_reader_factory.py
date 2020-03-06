@@ -4,13 +4,10 @@ from reader.labels_reader.labels_reader_txt import LabelsReaderTxt
 from utils.fileutils import debug
 
 
-def create_reader(info_set, info_format, conf, batches_id, language_scheme = None):
+def create_reader(filename, info_format, conf, batches_id, language_scheme = None, alt = False):
 
     #read labels with txt format
-    if info_format == "txt": return LabelsReaderTxt(info_set, conf, batches_id, language_scheme)
+    if info_format == "txt": return LabelsReaderTxt(filename, conf, batches_id, language_scheme, alt)
 
-    else:
-        print(info_format+" is not defined as \"info_format\" in \"info_set\": "+info_set)
-        print(debug.get_debug_info())
-        print("exiting...")
-        sys.exit()
+    raise ValueError('label format must be "txt"')
+

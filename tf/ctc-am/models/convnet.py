@@ -35,10 +35,11 @@ class ConvNet:
         else:
             self.is_training = True
 
-        if config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_SATGE] \
-                != constants.SAT_SATGES.UNADAPTED:
+        if config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_TYPE] \
+                != constants.SAT_TYPE.UNADAPTED:
             num_sat_layers = config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.NUM_SAT_LAYERS]
-            adapt_dim = config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_FEAT_DIM]
+            #adapt_dim = config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_FEAT_DIM]
+            adapt_dim = 100
             self.is_trainable_sat=False
 
         else:
@@ -79,8 +80,8 @@ class ConvNet:
         batch_size = tf.shape(self.feats)[0]
         #outputs = tf.transpose(self.feats, (1, 0, 2), name = "feat_transpose")
 
-        if config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_SATGE] \
-                != constants.SAT_SATGES.UNADAPTED:
+        if config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_TYPE] \
+                != constants.SAT_TYPE.UNADAPTED:
             #SAT
             with tf.variable_scope(constants.SCOPES.SPEAKER_ADAPTAION):
                 self.sat = tf.placeholder(tf.float32, [None, 1, adapt_dim], name = "sat")

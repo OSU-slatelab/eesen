@@ -4,7 +4,7 @@
 
 # Provides base definition for class, common auxiliary functions
  
-class LRScheduler():
+class LRScheduler:
 
     def __init__(self, config):
         pass
@@ -21,15 +21,18 @@ class LRScheduler():
     def resume_from_log(self):
         pass
 
-    def __compute_avg_ters(self, ters):
-        nters=0
-        avg_ters = 0.0
-        for language_id, target_scheme in ters.items():
-            for target_id, ter in target_scheme.items():
-                if(ter > 0):
-                    avg_ters += ter
-                    nters+=1
-        avg_ters /= float(nters)
+    def compute_avg_ters(self, stats):
+        total_ters, nters = 0.0, 0.0
+        for language_id, target_scheme in stats.items():
+            for target_id, stat in target_scheme.items():
 
-        return avg_ters
+                # Skip the number stat
+                if target_id == 'n':
+                    continue
+
+                #if stat['ter'] > 0:
+                total_ters += stat['ter']
+                nters += 1
+
+        return total_ters / nters
 

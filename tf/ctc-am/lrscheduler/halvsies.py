@@ -14,7 +14,6 @@ import re
 
 class Halvsies(LRScheduler):
     def __init__(self, config):
-        LRScheduler.__init__(self,config)
         self.__config = config
         self.__lr_rate = self.__config[constants.CONF_TAGS.LR_RATE]
         self.__epoch = 1
@@ -66,9 +65,9 @@ class Halvsies(LRScheduler):
     def get_status(self):
         return self.__status
 
-    def update_lr_rate(self, cv_ters):
+    def update_lr_rate(self, cv_stats):
         # when there are multiple ters, compute average
-        avg_ters = self.__compute_avg_ters(cv_ters)
+        avg_ters = self.compute_avg_ters(cv_stats)
 
         should_stop = False 
         restore = None
@@ -91,11 +90,12 @@ class Halvsies(LRScheduler):
 
         elif (self.__lr_rate <= self.__min_lr_rate):
             if (not should_stop):
-                self.__set_status("LRScheduler.Halvsies: not updating learning rate, currently at minimum ", self.__min_lr_rate)
+                self.__set_status("LRScheduler.Halvsies: not updating learning rate, currently at minimum %.4g" % self.__min_lr_rate)
 
         elif (self.__best_avg_ters > avg_ters):
             if (not should_stop):
-                self.__set_status("LRScheduler.Halvsies: not updating learning rate, TER improved %.1f%% from epoch %d" % (100.0*(self.__best_avg_ters-avg_ters), self.__best_epoch))
+                args = (100.0*(self.__best_avg_ters-avg_ters), self.__best_epoch)
+                self.__set_status("LRScheduler.Halvsies: not updating learning rate, TER improved %.1f%% from epoch %d" % args)
 
         else:
             self.__lr_rate = self.__lr_rate * self.__half_rate
@@ -103,9 +103,11 @@ class Halvsies(LRScheduler):
                 self.__lr_rate = self.__min_lr_rate
 
             if (should_stop):
-                self.__set_status("LRScheduler.Halvsies: TER worse by %.1f%% from %.1f%% in epoch %d, will restore" % (100.0*(avg_ters-self.__best_avg_ters), 100.0*self.__best_avg_ters, self.__best_epoch))
+                args = (100.0*(avg_ters-self.__best_avg_ters), 100.0*self.__best_avg_ters, self.__best_epoch)
+                self.__set_status("LRScheduler.Halvsies: TER worse by %.1f%% from %.1f%% in epoch %d, will restore" % args)
             else:
-                self.__set_status("LRScheduler.Halvsies: TER worse by %.1f%% from %.1f%% in epoch %d, updating learning rate to %.4g" % (100.0*(avg_ters-self.__best_avg_ters), 100.0*self.__best_avg_ters, self.__best_epoch, self.__lr_rate))
+                args = (100.0*(avg_ters-self.__best_avg_ters), 100.0*self.__best_avg_ters, self.__best_epoch, self.__lr_rate)
+                self.__set_status("LRScheduler.Halvsies: TER worse by %.1f%% from %.1f%% in epoch %d, updating learning rate to %.4g" % args)
             restore = self.__best_epoch
 
         if(self.__best_avg_ters > avg_ters):
@@ -116,19 +118,6 @@ class Halvsies(LRScheduler):
 
         #print(self.get_status())
         return self.__epoch, self.__lr_rate, should_stop, restore
-
-
-    def __compute_avg_ters(self, ters):
-        nters=0
-        avg_ters = 0.0
-        for language_id, target_scheme in ters.items():
-            for target_id, ter in target_scheme.items():
-                if(ter > 0):
-                    avg_ters += ter
-                    nters+=1
-        avg_ters /= float(nters)
-
-        return avg_ters
 
     def set_epoch(self, epoch):
         self.__epoch = epoch

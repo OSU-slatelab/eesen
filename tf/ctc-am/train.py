@@ -38,10 +38,13 @@ def main_parser():
     parser.add_argument('--debug', default=False, dest='debug', action='store_true', help='enable debug mode')
     parser.add_argument('--store_model', default=False, dest='store_model', action='store_true', help='store model')
     parser.add_argument('--data_dir', default = "", help = "data dir")
-    parser.add_argument('--train_dir', default = "", help='log and model (output) dir')
+    parser.add_argument('--train_dir', default = "", help = 'log and model (output) dir')
+    parser.add_argument('--teacher_config', default = "", help = 'pretrained teacher model configuration file')
+    parser.add_argument('--teacher_weights', default = "", help = 'pretrained teacher model weights dir')
     parser.add_argument('--dump_cv_fwd', default=False, dest='dump_cv_fwd', action='store_true', help='save forward pass of cv')
     parser.add_argument('--batch_size', default = 32, type=int, help='batch size')
     parser.add_argument('--noshuffle', default=True, dest='do_shuf', action='store_false', help='do not shuffle training samples')
+    parser.add_argument('--target', default='ctc', help='Options: "ctc", "detect", and "verify" (single label)')
 
     #ckpt arguments
     parser.add_argument('--import_config', default = "", help='load an old configuration file (config.pkl) extra labels will be added to old configuration')
@@ -50,10 +53,11 @@ def main_parser():
     parser.add_argument('--force_lr_epoch_ckpt', default=False, action='store_true', help='force to start for epoch 0 with the learning rate specified in flags')
 
     #augment arguments
-    parser.add_argument('--augment', default=False, dest='augment', action='store_true', help='do internal data augmentation')
+    #parser.add_argument('--augment', default=False, dest='augment', action='store_true', help='do internal data augmentation')
     parser.add_argument('--window', default=3, type=int, help='how many frames will concatenate')
     parser.add_argument('--subsampling', default=3, type=int, help='how much subsampling will you apply')
     parser.add_argument('--roll', default=False, action='store_true', help='apply random rolls to the frames in the batch')
+    parser.add_argument('--concatenate', default = 1, type = int, help = "How many utterances to concatenate")
 
     #architecture arguments
     parser.add_argument('--lstm_type', default="cudnn", help = "lstm type: cudnn, fuse, native")
@@ -67,9 +71,10 @@ def main_parser():
     parser.add_argument('--l2', default = 0.0, type=float, help='l2 normalization')
     parser.add_argument('--nlayer', default = 5, type=int, help='#layer')
     parser.add_argument('--nhidden', default = 320, type=int, help='dimension of hidden units in single direction')
-    parser.add_argument('--clip', default = 0.1, type=float, help='gradient clipping')
+    parser.add_argument('--clip', default = 5, type=float, help='gradient clipping')
     parser.add_argument('--batch_norm', default = False, dest='batch_norm', action='store_true', help='add batch normalization to FC layers')
     parser.add_argument('--grad_opt', default = "grad", help='optimizer: grad, adam, momentum, cuddnn only work with grad')
+    parser.add_argument('--loss', default = "ctc", help='loss can be "ctc" or "eemmi"')
 
     #training runtime arguments
     parser.add_argument('--nepoch', default = 30, type=int, help='#epoch')
@@ -96,12 +101,12 @@ def create_sat_config(args, config_imported = None):
 
     sat={}
 
-    if(config_imported and config_imported[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_SATGE] == constants.SAT_TYPE.UNADAPTED ):
+    if config_imported and config_imported[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_SATGE] == constants.SAT_TYPE.UNADAPTED :
 
-        if(config_imported[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_SATGE] == constants.SAT_SATGES.UNADAPTED):
+        if config_imported[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_SATGE] == constants.SAT_SATGES.UNADAPTED:
             sat[constants.CONF_TAGS.SAT_SATGE] = constants.SAT_SATGES.TRAIN_SAT
 
-        elif(config_imported[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_SATGE] == constants.SAT_SATGES.TRAIN_SAT):
+        elif config_imported[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_SATGE] == constants.SAT_SATGES.TRAIN_SAT:
             sat[constants.CONF_TAGS.SAT_SATGE] = constants.SAT_SATGES.FINE_TUNE
 
         else:
@@ -111,14 +116,14 @@ def create_sat_config(args, config_imported = None):
             sys.exit()
     else:
         #setting sat stage
-        if(args.sat_type == constants.SAT_TYPE.UNADAPTED):
+        if args.sat_type == constants.SAT_TYPE.UNADAPTED:
             sat[constants.CONF_TAGS.SAT_TYPE] = constants.SAT_TYPE.UNADAPTED
 
-        elif(args.sat_type == constants.SAT_TYPE.CONCAT):
+        elif args.sat_type == constants.SAT_TYPE.CONCAT:
 
             sat[constants.CONF_TAGS.SAT_TYPE] = constants.SAT_TYPE.CONCAT
 
-        elif(args.sat_type == constants.SAT_TYPE.SHIFT):
+        elif args.sat_type == constants.SAT_TYPE.SHIFT:
 
             sat[constants.CONF_TAGS.SAT_TYPE] = constants.SAT_TYPE.SHIFT
 
@@ -128,13 +133,13 @@ def create_sat_config(args, config_imported = None):
             print("exiting...")
             sys.exit()
 
-        if(args.sat_stage == constants.SAT_SATGES.FINE_TUNE):
+        if args.sat_stage == constants.SAT_SATGES.FINE_TUNE:
             sat[constants.CONF_TAGS.SAT_SATGE] = constants.SAT_SATGES.FINE_TUNE
 
-        elif(args.sat_stage == constants.SAT_SATGES.TRAIN_SAT):
+        elif args.sat_stage == constants.SAT_SATGES.TRAIN_SAT:
             sat[constants.CONF_TAGS.SAT_SATGE] = constants.SAT_SATGES.TRAIN_SAT
 
-        elif(args.sat_stage == constants.SAT_SATGES.TRAIN_DIRECT):
+        elif args.sat_stage == constants.SAT_SATGES.TRAIN_DIRECT:
 
             sat[constants.CONF_TAGS.SAT_SATGE] = constants.SAT_SATGES.TRAIN_DIRECT
 
@@ -154,18 +159,16 @@ def create_online_arg_config(args):
     #TODO enter the values using a conf file or something
     online_augment_config={}
 
-    if(args.window % 2 == 0):
-        print("Error: window can not be even currently : "+str(args.window))
-        print(debug.get_debug_info())
-        print("exiting...")
-        sys.exit()
+    if args.window % 2 == 0:
+        raise ValueError("Window cannot be even")
+    if args.roll:
+        print("WARNING: --roll has been deprecated, option ignored")
 
     online_augment_config[constants.AUGMENTATION.WINDOW] = args.window
     online_augment_config[constants.AUGMENTATION.SUBSAMPLING] = args.subsampling
     #online_augment_config[constants.AUGMENTATION.ROLL] = args.roll
     online_augment_config[constants.AUGMENTATION.ROLL] = False
-    if (args.roll):
-        print("WARNING: --roll has been deprecated, option ignored")
+    online_augment_config[constants.AUGMENTATION.CONCATENATE] = args.concatenate
 
     return online_augment_config
 
@@ -182,7 +185,10 @@ def create_global_config(args):
         constants.CONF_TAGS.STORE_MODEL: args.store_model,
         constants.CONF_TAGS.DATA_DIR: args.data_dir,
         constants.CONF_TAGS.TRAIN_DIR: args.train_dir,
+        constants.CONF_TAGS.TEACHER_CONFIG: args.teacher_config,
+        constants.CONF_TAGS.TEACHER_WEIGHTS: args.teacher_weights,
         constants.CONF_TAGS.DUMP_CV_FWD: args.dump_cv_fwd,
+        constants.CONF_TAGS.TARGET: args.target,
 
         #io arguments
         constants.CONF_TAGS.BATCH_SIZE: args.batch_size,
@@ -200,6 +206,7 @@ def create_global_config(args):
         constants.CONF_TAGS.DROPOUT: args.dropout,
         constants.CONF_TAGS.CLIP_NORM: args.clip_norm,
         constants.CONF_TAGS.KL_WEIGHT: args.kl_weight,
+        constants.CONF_TAGS.COMPUTE_ACC: False,
 
         #architecture arguments
         #TODO this can be joined with one argument
@@ -214,6 +221,7 @@ def create_global_config(args):
         constants.CONF_TAGS.CLIP: args.clip,
         constants.CONF_TAGS.BATCH_NORM: args.batch_norm,
         constants.CONF_TAGS.GRAD_OPT: args.grad_opt,
+        constants.CONF_TAGS.LOSS: args.loss,
 
     }
 
@@ -224,29 +232,28 @@ def create_global_config(args):
 
 def update_conf_import(config, args):
 
-    if(args.data_dir):
+    if args.data_dir:
         config[constants.CONF_TAGS.DATA_DIR] = args.data_dir
 
-    if(args.train_dir):
+    if args.train_dir:
         config[constants.CONF_TAGS.TRAIN_DIR] = args.train_dir
 
-    if(args.dump_cv_fwd):
+    if args.teacher_weights:
+        config[constants.CONF_TAGS.TEACHER_WEIGHTS] = args.teacher_weights
+
+    if args.teacher_config:
+        config[constants.CONF_TAGS.TEACHER_CONFIG] = args.teacher_config
+
+    if args.dump_cv_fwd:
         config[constants.CONF_TAGS.DUMP_CV_FWD] = args.dump_cv_fwd
 
-    if(args.continue_ckpt):
+    if args.continue_ckpt:
         config[constants.CONF_TAGS.CONTINUE_CKPT] = args.continue_ckpt
 
-    if(config[constants.CONF_TAGS.NEPOCH] != args.nepoch):
-        config[constants.CONF_TAGS.NEPOCH] = args.nepoch
-
-    if(config[constants.CONF_TAGS.LR_RATE] != args.lr_rate):
-        config[constants.CONF_TAGS.LR_RATE] = args.lr_rate
-
-    if(args.lrscheduler):
-        config[constants.CONF_TAGS.LRSCHEDULER] = args.lrscheduler
-
-    if(config[constants.CONF_TAGS.MIN_LR_RATE] != args.min_lr_rate):
-        config[constants.CONF_TAGS.MIN_LR_RATE] = args.min_lr_rate
+    config[constants.CONF_TAGS.LRSCHEDULER] = args.lrscheduler
+    config[constants.CONF_TAGS.NEPOCH] = args.nepoch
+    config[constants.CONF_TAGS.LR_RATE] = args.lr_rate
+    config[constants.CONF_TAGS.MIN_LR_RATE] = args.min_lr_rate
 
 def import_config(args):
 
@@ -274,130 +281,90 @@ def main():
     parser = main_parser()
     args = parser.parse_args()
 
-    if(args.import_config):
+    if args.import_config:
         config = create_global_config(args)
         config.update(import_config(args))
-
     else:
         config = create_global_config(args)
 
+    tr_data = {}
+    cv_data = {}
 
-    print(80 * "-")
-    print("reading training set")
-    print(80 * "-")
-    print(80 * "-")
-    print("tr_x:")
-    print(80 * "-")
-    #load training feats
-    if(config[constants.CONF_TAGS.MODEL] == constants.MODEL_NAME.ARCNET_VIDEO):
-        tr_x = feats_reader_factory.create_reader('train', 'video', config)
+    # load feats
+    data_format = 'kaldi'
+    if config[constants.CONF_TAGS.MODEL] == constants.MODEL_NAME.ARCNET_VIDEO:
+        data_format = 'video'
 
-    else:
-        tr_x = feats_reader_factory.create_reader('train', 'kaldi', config)
+    tr_data['x'] = feats_reader_factory.create_reader('train', data_format, config)
+    cv_data['x'] = feats_reader_factory.create_reader('cv', data_format, config)
+    tr_ids = tr_data['x'].get_batches_id()
+    cv_ids = cv_data['x'].get_batches_id()
 
-    print(80 * "-")
-    print("tr_y:")
-    print(80 * "-")
-    #load training targets
-    if(args.import_config):
-        print("creating tr_y according imported config...")
-        tr_y = labels_reader_factory.create_reader('train', 'txt', config, tr_x.get_batches_id(), config[constants.CONF_TAGS.LANGUAGE_SCHEME])
-    else:
-        print("creating tr_y from scratch...")
-        tr_y = labels_reader_factory.create_reader('train', 'txt', config, tr_x.get_batches_id())
+    # load targets
+    tr_args = ['labels.tr', 'txt', config, tr_ids]
+    cv_args = ['labels.cv', 'txt', config, cv_ids]
+    if args.import_config:
+        tr_args.append(config[constants.CONF_TAGS.LANGUAGE_SCHEME])
+        cv_args.append(config[constants.CONF_TAGS.LANGUAGE_SCHEME])
 
+    tr_data['y'] = labels_reader_factory.create_reader(*tr_args)
+    cv_data['y'] = labels_reader_factory.create_reader(*cv_args)
 
-
-    print(80 * "-")
-    print("cv_x:")
-    print(80 * "-")
-    #create lm_reader for labels
-    if(config[constants.CONF_TAGS.MODEL] == constants.MODEL_NAME.ARCNET_VIDEO):
-        cv_x = feats_reader_factory.create_reader('cv', 'video', config)
-    else:
-        cv_x = feats_reader_factory.create_reader('cv', 'kaldi', config)
-
-
-    print(80 * "-")
-    print("cv_y:")
-    print(80 * "-")
-    #create lm_reader for labels
-    if(args.import_config):
-        print("creating cv_y according imported config...")
-        cv_y = labels_reader_factory.create_reader('cv', 'txt', config, cv_x.get_batches_id(), config[constants.CONF_TAGS.LANGUAGE_SCHEME])
-    else:
-        print("creating cv_y from scratch...")
-        cv_y = labels_reader_factory.create_reader('cv', 'txt', config, cv_x.get_batches_id())
+    # Load verify
+    if args.target == 'verify':
+        tr_data['z'] = labels_reader_factory.create_reader('verify.tr', 'txt', config, tr_ids)
+        cv_data['z'] = labels_reader_factory.create_reader('verify.cv', 'txt', config, cv_ids)
 
     #set config (targets could change)
-    config[constants.CONF_TAGS.INPUT_FEATS_DIM] = cv_x.get_num_dim()
-    config[constants.CONF_TAGS.LANGUAGE_SCHEME] = cv_y.get_language_scheme()
+    config[constants.CONF_TAGS.INPUT_FEATS_DIM] = cv_data['x'].get_num_dim()
+    config[constants.CONF_TAGS.LANGUAGE_SCHEME] = cv_data['y'].get_language_scheme()
 
     if config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_TYPE] != constants.SAT_TYPE.UNADAPTED:
 
-        print(80 * "-")
-        print(80 * "-")
-        print("reading speaker adaptation set:")
-        print(80 * "-")
-        print(80 * "-")
-
-        print("tr_sat:")
-        print(80 * "-")
-        tr_sat = sat_reader_factory.create_reader('kaldi', config, tr_x.get_batches_id())
-        print(80 * "-")
-
-        print("cv_sat:")
-        print(80 * "-")
-        cv_sat = sat_reader_factory.create_reader('kaldi', config, cv_x.get_batches_id())
-        print(80 * "-")
-        print(80 * "-")
+        tr_data['sat'] = sat_reader_factory.create_reader('kaldi', config, tr_ids)
+        cv_data['sat'] = sat_reader_factory.create_reader('kaldi', config, cv_ids)
 
 
         config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_FEAT_DIM] = int(tr_sat.get_num_dim())
-        config[constants.CONF_TAGS.MODEL_DIR] = os.path.join(config[constants.CONF_TAGS.TRAIN_DIR],
-                                                             constants.DEFAULT_NAMES.MODEL_DIR_NAME,
-                                                             constants.DEFAULT_NAMES.SAT_DIR_NAME+"_"+
-                                                             config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_TYPE]+"_"+
-                                                             config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_SATGE]+"_"+
-                                                             str(config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.NUM_SAT_LAYERS]))
+        config[constants.CONF_TAGS.MODEL_DIR] = os.path.join(
+            config[constants.CONF_TAGS.TRAIN_DIR],
+            constants.DEFAULT_NAMES.MODEL_DIR_NAME,
+            constants.DEFAULT_NAMES.SAT_DIR_NAME+"_"+
+                config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_TYPE]+"_"+
+                config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_SATGE]+"_"+
+                str(config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.NUM_SAT_LAYERS])
+        )
 
-        #checking that all sets are consistent
-        set_checkers.check_sets_training(cv_x, cv_y, tr_x, tr_y, tr_sat, cv_sat)
-
-        data = (cv_x, tr_x, cv_y, tr_y, cv_sat, tr_sat)
-
-        print("adaptation data with a dimensionality of "
-              +str(config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_FEAT_DIM])+
-              " prepared...\n")
-
+        print("adaptation data with a dimensionality of {} prepared...\n".format(
+            str(config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_FEAT_DIM])))
     else:
-        data = (cv_x, tr_x, cv_y, tr_y)
         config[constants.CONF_TAGS.MODEL_DIR] = os.path.join(config[constants.CONF_TAGS.TRAIN_DIR],
                                                              constants.DEFAULT_NAMES.MODEL_DIR_NAME)
-        #checking that all sets are consistent
-        set_checkers.check_sets_training(cv_x, cv_y, tr_x, tr_y)
 
-    #create folder for storing experiment
+    data = (tr_data, cv_data)
+
+    # checking that all sets are consistent
+    set_checkers.check_sets_training(tr_data, cv_data)
+
+    # create folder for storing experiment
     if not os.path.exists(config[constants.CONF_TAGS.MODEL_DIR]):
         os.makedirs(config[constants.CONF_TAGS.MODEL_DIR])
 
-    pickle.dump(config, open(os.path.join(config[constants.CONF_TAGS.MODEL_DIR], "config.pkl"), "wb"), protocol=2)
+    pickle.dump(config, open(os.path.join(config[constants.CONF_TAGS.MODEL_DIR], "config.pkl"), "wb"), protocol=4)
 
-    #start the actual training
-    eesen=Eesen()
+    # start the actual training
+    eesen = Eesen()
 
     print(80 * "-")
     print("done with data preparation")
     print(80 * "-")
-    print("begining training with following config:")
+    #print("begining training with following config:")
 
-    for key, value in config.items():
-        print(key+" "+str(value))
-    print(80 * "-")
-
+    #for key, value in config.items():
+    #    print(key+" "+str(value))
+    #print(80 * "-")
 
     eesen.train(data, config)
-
 
 
 if __name__ == "__main__":

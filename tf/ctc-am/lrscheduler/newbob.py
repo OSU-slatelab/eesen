@@ -16,7 +16,6 @@ import re
 
 class Newbob(LRScheduler):
     def __init__(self, config):
-        LRScheduler.__init__(self,config)
         self.__config = config
         self.__lr_rate = self.__config[constants.CONF_TAGS.LR_RATE]
         self.__nepoch = self.__config[constants.CONF_TAGS.NEPOCH]
@@ -73,9 +72,9 @@ class Newbob(LRScheduler):
     def get_status(self):
         return self.__status
 
-    def update_lr_rate(self, cv_ters):
+    def update_lr_rate(self, cv_stats):
         # when there are multiple ters, compute average
-        avg_ters = self.__compute_avg_ters(cv_ters)
+        avg_ters = self.compute_avg_ters(cv_stats)
 
         should_stop = False 
         restore = None
@@ -141,18 +140,6 @@ class Newbob(LRScheduler):
         #print(self.get_status())
         return self.__epoch, self.__lr_rate, should_stop, restore
 
-
-    def __compute_avg_ters(self, ters):
-        nters=0
-        avg_ters = 0.0
-        for language_id, target_scheme in ters.items():
-            for target_id, ter in target_scheme.items():
-                if(ter > 0):
-                    avg_ters += ter
-                    nters+=1
-        avg_ters /= float(nters)
-
-        return avg_ters
 
     def set_epoch(self, epoch):
         self.__epoch = epoch

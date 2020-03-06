@@ -60,12 +60,15 @@ class FeatsReader(object):
         print("exiting... \n")
         sys.exit()
 
-    def get_language_augment_scheme(self):
+    def get_language_scheme(self):
         return self._language_augment_scheme
 
     #getter number of feature dimension. Just taking the size of the first
     def get_num_dim (self):
-        return self._batches_x[0][0][3]
+        if self._augmenter.concatenate > 1:
+            return self._batches_x[0][0][0][3]
+        else:
+            return self._batches_x[0][0][3]
 
     #get number of batches
     def get_num_batches (self):

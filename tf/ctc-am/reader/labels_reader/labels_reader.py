@@ -7,7 +7,9 @@ from utils.fileutils import debug
 
 class LabelsReader(object):
 
-    def __init__(self, info_set, m_conf, batches_id, language_scheme = None):
+    def __init__(self, filename, m_conf, batches_id, language_scheme = None, alt = False):
+
+        self.alt = alt
 
         #temporal dictonary that stores all paths from all targets dict[language][target_1]=path_target_1
         self.__all_languages_labels_files={}
@@ -18,20 +20,16 @@ class LabelsReader(object):
         #temporal dictornary to store all targets dict[language][target_1]=dict_target_1
         all_languages_labels_dicts={}
 
-        #hack to get the correct name for the file
-        if(info_set=='train'):
-            info_set='tr'
-
-        if(self.__is_multiple_languages(m_conf["data_dir"])):
-            print("multilanguage setup detected (in labels)... \n")
+        if self.__is_multiple_languages(m_conf["data_dir"]):
+            #print("multilanguage setup detected (in labels)... \n")
             self.__read_files_multiple_langues(m_conf[constants.CONF_TAGS.DATA_DIR],
-                                               info_set)
+                                               filename)
 
         else:
-            print("unilanguage setup detected (in labels)... \n")
+            #print("unilanguage setup detected (in labels)... \n")
             self.__read_one_language(m_conf[constants.CONF_TAGS.DATA_DIR],
                                      constants.DEFAULT_NAMES.NO_LANGUAGE_NAME,
-                                     info_set)
+                                     filename)
 
 
         #load all dicts
@@ -66,12 +64,9 @@ class LabelsReader(object):
 
     def read(self, idx_batch):
 
-        if(idx_batch > len(self.__batches_y) - 1):
+        if idx_batch > len(self.__batches_y) - 1:
+            raise ValueError("idx_batch for labels is out of bounds")
 
-            print("idx_batch for labels is out of bounds")
-            print(debug.get_debug_info())
-            print("exiting...\n")
-            sys.exit()
         return self.__batches_y[idx_batch]
 
     #getter
@@ -145,32 +140,26 @@ class LabelsReader(object):
             else:
                 return True
 
-    def __read_files_multiple_langues(self, data_dir, info_set):
+    def __read_files_multiple_langues(self, data_dir, filename):
 
         for language_name in os.listdir(data_dir):
-            self.__read_one_language(os.path.join(data_dir,language_name), language_name, info_set)
+            self.__read_one_language(os.path.join(data_dir,language_name), language_name, filename)
 
-    def __read_one_language(self, language_dir, language_name, info_set):
+    def __read_one_language(self, language_dir, language_name, filename):
 
         self.__all_languages_labels_files[language_name]={}
 
-        file_find=False
-
-        for filename in os.listdir(language_dir):
-
-            if (filename.startswith('labels') and filename.endswith('.'+info_set)):
-                target_id=filename.replace("labels_","").replace("labels","").replace('.'+info_set,"")
-                if(target_id==""):
-                    target_id=constants.DEFAULT_NAMES.NO_TARGET_NAME
-
-                self.__all_languages_labels_files[language_name][target_id] = os.path.join(language_dir, filename)
-                file_find=True
-
-        if(not file_find):
-            print("no label files fins in " + language_dir + " with info_set: " + info_set)
+        if not os.path.isfile(os.path.join(language_dir, filename)):
+            print("label file", filename, "not found")
             print(debug.get_debug_info())
             print("exiting...\n")
             sys.exit()
+        
+        import re
+        target_id = re.sub('labels_?|\..*', '', filename)
+        if target_id == "":
+            target_id = constants.DEFAULT_NAMES.NO_TARGET_NAME
+        self.__all_languages_labels_files[language_name][target_id] = os.path.join(language_dir, filename)
 
     def __order_labels(self, all_languages_labels_dicts, batches_id):
 
@@ -188,10 +177,10 @@ class LabelsReader(object):
 
             #getting batch language of the batch
             #(just for clarification)
-            batch_language=batch_id[1]
+            batch_language = batch_id[1]
 
             #initialize counters and target batches
-            #note that we are taking the langugae from batch_id
+            #note that we are taking the language from batch_id
             for language_id, target_scheme in all_languages_labels_dicts.items():
                 yidx[language_id]={}
                 yval[language_id]={}
@@ -212,9 +201,17 @@ class LabelsReader(object):
                     for target_id, label_dict in language_dict.items():
 
                         #if it is the correct one we fill everything ok
-                        if(language_id == batch_language):
-                            #getting taget sequence from the current dictionary
-                            label = label_dict[uttid]
+                        if language_id == batch_language:
+                            #getting target sequence from the current dictionary
+
+                            if self.alt:
+                                j = np.random.randint(len(batch_id[0]))
+                                label = label_dict[batch_id[0][j]]
+                            else:
+                                if isinstance(uttid, list):
+                                    label = [item for uid in uttid for item in label_dict[uid]]
+                                else:
+                                    label = label_dict[uttid]
 
                             #getting the max number of previous or current length
                             max_label_len[language_id][target_id] = max(max_label_len[language_id][target_id], len(label))

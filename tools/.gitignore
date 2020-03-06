@@ -6,3 +6,10 @@
 
 # auto-generated
 env.sh
+ATLAS/
+extras/irstlm/
+openfst
+openfst-1.4.1/
+sctk
+sctk-2.4.9/
+sph2pipe_v2.5/

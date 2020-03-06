@@ -54,13 +54,15 @@ class DeepBidirRNN:
                 for i in range(nlayer):
                     with tf.variable_scope("layer%d" % i):
 
-                        cudnn_model = tf.contrib.cudnn_rnn.CudnnLSTM(1,
-                                                                     nhidden,
-                                                                     'linear_input',
-                                                                     'bidirectional',
-                                                                     dropout,
-                                                                     kernel_initializer=tf.contrib.layers.xavier_initializer(),
-                                                                     bias_initializer=tf.contrib.layers.xavier_initializer())
+                        cudnn_model = tf.contrib.cudnn_rnn.CudnnLSTM(
+                            num_layers         = 1,
+                            num_units          = nhidden,
+                            input_mode         = 'linear_input',
+                            direction          = 'bidirectional',
+                            dropout            = dropout,
+                            kernel_initializer = tf.contrib.layers.xavier_initializer(),
+                            bias_initializer   = tf.contrib.layers.xavier_initializer(),
+                        )
 
 
                         outputs, _output_h = cudnn_model(outputs, None, True)
@@ -81,13 +83,15 @@ class DeepBidirRNN:
                             is_training=self.is_training_ph, updates_collections=None)
 
             else:
-                cudnn_model = tf.contrib.cudnn_rnn.CudnnLSTM(nlayer,
-                                                             nhidden,
-                                                             'linear_input',
-                                                             'bidirectional',
-                                                             dropout,
-                                                             kernel_initializer=tf.contrib.layers.xavier_initializer(),
-                                                             bias_initializer=tf.contrib.layers.xavier_initializer())
+                cudnn_model = tf.contrib.cudnn_rnn.CudnnLSTM(
+                    num_layers         = nlayer,
+                    num_units          = nhidden,
+                    input_mode         = 'linear_input',
+                    direction          = 'bidirectional',
+                    dropout            = dropout,
+                    kernel_initializer = tf.contrib.layers.xavier_initializer(),
+                    bias_initializer   = tf.contrib.layers.xavier_initializer(),
+                )
 
 
                 # arguments are: inputs, initial_state,
@@ -224,17 +228,17 @@ class DeepBidirRNN:
         tf.set_random_seed(config[constants.CONF_TAGS.RANDOM_SEED])
 
 
-        if(constants.CONF_TAGS.INIT_NPROJ in config):
+        if constants.CONF_TAGS.INIT_NPROJ in config:
             init_nproj = config[constants.CONF_TAGS.INIT_NPROJ]
         else:
             init_nproj = 0
 
-        if(constants.CONF_TAGS.FINAL_NPROJ in config):
+        if constants.CONF_TAGS.FINAL_NPROJ in config:
             finalfeatproj = config[constants.CONF_TAGS.FINAL_NPROJ]
         else:
             finalfeatproj = 0
 
-        if(constants.CONFIG_TAGS_TEST in config):
+        if constants.CONFIG_TAGS_TEST in config:
             self.is_training = False
         else:
             self.is_training = True
@@ -253,14 +257,19 @@ class DeepBidirRNN:
         self.is_training_ph = tf.placeholder(tf.bool, shape=(), name="is_training")
         self.opt = []
 
+        if config[constants.CONFIG_TAGS_TEST.VERIFY_FILE]:
+            self.verify = tf.placeholder(tf.int32, [None], name = "verify")
 
         self.labels=[]
         self.priors=[]
+        self.alt=[]
 
         #optional outputs for test
+        self.acc = []
         self.ters = []
         self.costs = []
         self.debug_costs = []
+        self.verify_acc = []
 
         #mantadory outpus for test
         self.softmax_probs = []
@@ -272,8 +281,13 @@ class DeepBidirRNN:
         #creating enough placeholders for out graph
         for language_id, target_scheme in language_scheme.items():
             for target_id, _ in target_scheme.items():
-                self.labels.append(tf.sparse_placeholder(tf.int32))
+                if config[constants.CONFIG_TAGS_TEST.COMPUTE_TER]:
+                    self.labels.append(tf.sparse_placeholder(tf.int32))
+
                 self.priors.append(tf.placeholder(tf.float32))
+                if config[constants.CONF_TAGS.COMPUTE_ACC]:
+                    for i in range(config[constants.CONFIG_TAGS_TEST.ALTERNATIVES]):
+                        self.alt.append(tf.sparse_placeholder(tf.int32))
 
         self.seq_len = self.length(self.feats)
 
@@ -283,14 +297,15 @@ class DeepBidirRNN:
         if config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_TYPE] \
                 != constants.SAT_TYPE.UNADAPTED:
 
-            self.sat = tf.placeholder(tf.float32, [None, 1, config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_FEAT_DIM]], name="sat")
+            sat_dim = config[constants.CONF_TAGS.SAT_CONF][constants.CONF_TAGS.SAT_FEAT_DIM]
+            self.sat = tf.placeholder(tf.float32, [None, 1, sat_dim], name="sat")
             sat_t = tf.transpose(self.sat, (1, 0, 2), name="sat_transpose")
 
             outputs = self.my_sat_module(config, outputs, sat_t)
 
         if batch_norm:
-            outputs = tf.contrib.layers.batch_norm(outputs, scope = "bn", center=True, scale=True, decay=0.9, is_training=self.is_training_ph, updates_collections=None)
-
+            outputs = tf.contrib.layers.batch_norm(outputs, scope = "bn", center=True, scale=True,
+                    decay=0.9, is_training=self.is_training_ph, updates_collections=None)
 
         if init_nproj > 0:
             outputs = tf.contrib.layers.fully_connected(
@@ -298,7 +313,8 @@ class DeepBidirRNN:
                 scope = "init_projection")
 
         if lstm_type == "cudnn":
-            outputs = self.my_cudnn_lstm(outputs, batch_size, nlayer, nhidden, nfeat, nproj,  "cudnn_lstm", batch_norm, dropout, self.is_training)
+            outputs = self.my_cudnn_lstm(outputs, batch_size, nlayer, nhidden, nfeat, nproj,
+                    "cudnn_lstm", batch_norm, dropout, self.is_training)
         elif lstm_type == "fuse":
             outputs = self.my_fuse_block_lstm(outputs, batch_size, nlayer, nhidden, nfeat, nproj, "fuse_lstm")
         else:
@@ -311,14 +327,14 @@ class DeepBidirRNN:
                 scope = "final_projection")
 
         with tf.variable_scope("optimizer"):
-            optimizer = None
-            # TODO: cudnn only supports grad, but I think that adam should also work
             if grad_opt == "grad":
                 optimizer = tf.train.GradientDescentOptimizer(self.lr_rate)
             elif grad_opt == "adam":
                 optimizer = tf.train.AdamOptimizer(self.lr_rate)
             elif grad_opt == "momentum":
                 optimizer = tf.train.MomentumOptimizer(self.lr_rate, 0.9)
+            else:
+                raise ValueError("optimizer must be one of 'grad', 'adam', or 'momentum'")
 
         count=0
 
@@ -330,46 +346,61 @@ class DeepBidirRNN:
         for language_id, language_target_dict in language_scheme.items():
 
 
-            tmp_ctc_cost, tmp_debug_cost, tmp_ter, tmp_logits, tmp_softmax_probs, tmp_log_softmax_probs, tmp_log_likelihoods = [], [], [], [], [], [], []
-            tmp_kl_cost = []
+            tmp_ctc_cost, tmp_debug_cost, tmp_ter, tmp_logits, tmp_softmax_probs = [], [], [], [], []
+            tmp_log_softmax_probs, tmp_log_likelihoods, tmp_kl_cost, tmp_acc, tmp_ver = [], [], [], [], []
 
             with tf.variable_scope(constants.SCOPES.OUTPUT):
                 for target_id, num_targets in language_target_dict.items():
 
                     scope = "output_fc"
 
-                    if(len(language_scheme.items()) > 1):
+                    if len(language_scheme.items()) > 1:
                         scope=scope+"_"+language_id
-                    if(len(language_target_dict.items()) > 1):
+                    if len(language_target_dict.items()) > 1:
                         scope=scope+"_"+target_id
 
                     if batch_norm:
-                        outputs = tf.contrib.layers.batch_norm(outputs, scope = scope+"_bn", center=True, scale=True, decay=0.9,
-                                                             is_training=self.is_training_ph, updates_collections=None)
+                        outputs = tf.contrib.layers.batch_norm(
+                            outputs,
+                            scope               = scope+"_bn",
+                            center              = True,
+                            scale               = True,
+                            decay               = 0.9,
+                            is_training         = self.is_training_ph,
+                            updates_collections = None,
+                        )
 
 
-                    logit = tf.contrib.layers.fully_connected(activation_fn = None, inputs = outputs,
-                                                              num_outputs=num_targets,
-                                                              scope = scope,
-                                                              biases_initializer = tf.contrib.layers.xavier_initializer(),
-                                                              trainable=self.is_trainable_sat)
+                    logit = tf.contrib.layers.fully_connected(
+                        activation_fn      = None,
+                        inputs             = outputs,
+                        num_outputs        = num_targets,
+                        scope              = scope,
+                        biases_initializer = tf.contrib.layers.xavier_initializer(),
+                        trainable          = self.is_trainable_sat,
+                    )
 
                     #######
                     #here logits: time, batch, num_classes+1
                     #######
 
                     kl_loss = self.kl_divergence_with_logits(logit, num_targets)
-
-                    ctc_loss = tf.nn.ctc_loss(labels=self.labels[count], inputs=logit, sequence_length=self.seq_len)
-
-                    tmp_kl_cost.append(kl_loss)
-                    tmp_ctc_cost.append(ctc_loss)
-                    tmp_debug_cost.append(tf.reduce_mean(ctc_loss))
-
                     decoded, log_prob = tf.nn.ctc_greedy_decoder(logit, self.seq_len)
+                    prediction = tf.cast(decoded[0], tf.int32)
 
-                    ter = tf.reduce_sum(tf.edit_distance(tf.cast(decoded[0], tf.int32), self.labels[count], normalize = False))
-                    tmp_ter.append(ter)
+                    if config[constants.CONFIG_TAGS_TEST.COMPUTE_TER]:
+                        ctc_loss = tf.nn.ctc_loss(
+                            labels=self.labels[count],
+                            inputs=logit,
+                            sequence_length=self.seq_len,
+                        )
+
+                        tmp_kl_cost.append(kl_loss)
+                        tmp_ctc_cost.append(ctc_loss)
+                        tmp_debug_cost.append(tf.reduce_mean(ctc_loss))
+
+                        ter = tf.edit_distance(prediction, self.labels[count], normalize = False)
+                        tmp_ter.append(tf.reduce_sum(ter))
 
                     #storing outputs
                     tran_logit = tf.transpose(logit, (1, 0, 2)) * self.temperature
@@ -382,8 +413,26 @@ class DeepBidirRNN:
                     tmp_log_softmax_probs.append(log_softmax_prob)
 
                     log_likelihood = log_softmax_prob - tf.log(self.priors[count])
-                    tmp_log_likelihoods.append(log_likelihood)
+                    tmp_log_likelihoods.append(log_likelihood)                
 
+                    if config[constants.CONF_TAGS.COMPUTE_ACC]:
+                        accuracy = tf.math.greater(ter, -1)
+                        #tf.get_variable('accuracy', shape=[batch_size], dtype=tf.bool)
+                        for alternative in self.alt:
+                            alt_ter = tf.edit_distance(prediction, alternative, normalize = False)
+                            accuracy = tf.math.logical_and(accuracy, tf.math.greater_equal(alt_ter, ter))
+
+                        tmp_acc.append(tf.reduce_sum(tf.cast(accuracy, tf.float32)))
+
+                    if config[constants.CONFIG_TAGS_TEST.VERIFY_FILE]:
+                        prediction = tf.cast(tf.math.less(ter, 4), tf.float32)
+                        label = tf.cast(tf.math.less(self.verify, 1), tf.float32)
+                        TP = tf.count_nonzero(prediction * label)
+                        TN = tf.count_nonzero((prediction - 1) * (label - 1))
+                        FP = tf.count_nonzero(prediction * (label - 1))
+                        FN = tf.count_nonzero((prediction - 1) * label)
+
+                        tmp_ver.append([TP, TN, FP, FN])
 
 
                     count=count+1
@@ -418,12 +467,13 @@ class DeepBidirRNN:
 
             #reduce the mean of all targets of current language(language_id)
             tmp_ctc_cost = tf.reduce_mean(tmp_ctc_cost) + l2 * regularized_loss
-
             tmp_final_cost = (1-kl_weight)*tf.reduce_mean(tmp_ctc_cost)-(kl_weight*tf.reduce_mean(tmp_kl_cost))+(l2 * regularized_loss)
 
             self.debug_costs.append(tmp_debug_cost)
             self.costs.append(tmp_final_cost)
             self.ters.append(tmp_ter)
+            self.acc.append(tmp_acc)
+            self.verify_acc.append(tmp_ver)
             self.logits.append(tmp_logits)
             self.softmax_probs.append(tmp_softmax_probs)
 
@@ -433,7 +483,7 @@ class DeepBidirRNN:
             #gvs = optimizer.compute_gradients(tmp_ctc_cost, var_list=var_list)
             gvs = optimizer.compute_gradients(tmp_final_cost, var_list=var_list)
 
-            if(clip_norm):
+            if clip_norm:
                 capped_gvs = [(tf.clip_by_norm(grad, clip), var) for grad, var in gvs]
             else:
                 capped_gvs = [(tf.clip_by_value(grad, -clip, clip), var) for grad, var in gvs]

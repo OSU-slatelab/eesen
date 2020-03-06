@@ -3,11 +3,23 @@ class MODEL_NAME:
     ACHEN="achen"
     ACHEN_SUM="achen_sum"
     ACHEN_CONV="achen_conv"
-    DEEP_BILSTM="deepbilstm"
     DEEP_BILSTM_RELU="deepbilstmrelu"
     ARCNET="arc_net"
     ARCNET_VIDEO="arc_net_video"
     CONVNET="conv_net"
+    VERIFY="verify"
+    RESNET="resnet"
+    RESNET_BILSTM="resnet_bilstm"
+    DNN = "dnn"
+
+    DEEP_BILSTM="bilstm"
+    DEEP_LSTM="lstm"
+    CNN_BILSTM="cnn_bilstm"
+    CNN_LSTM="cnn_lstm"
+    DEEP_BIGRU="bigru"
+    DEEP_GRU="gru"
+    CNN_BIGRU="cnn_bigru"
+    CNN_GRU="cnn_gru"
 
 class DEFAULT_FILENAMES:
     SAT="sat_local"
@@ -35,7 +47,10 @@ class CONF_TAGS:
     DATA_DIR = "data_dir"
     TRAIN_DIR = "train_dir"
     MODEL_DIR = "model_dir"
+    TEACHER_WEIGHTS = "teacher_weights"
+    TEACHER_CONFIG = "teacher_config"
     DUMP_CV_FWD = "dump_cv_fwd"
+    TARGET = "target"
 
     #io arguments
     CONTINUE_CKPT="continue_ckpt"
@@ -74,6 +89,8 @@ class CONF_TAGS:
     DROPOUT="drop_out"
     CLIP_NORM="clip_norm"
     KL_WEIGHT="kl_weight"
+    COMPUTE_ACC = "compute_acc"
+    LOSS = "loss"
 
     #training conf
     RANDOM_SEED="random_seed"
@@ -90,6 +107,7 @@ class AUGMENTATION:
     WINDOW="window"
     SUBSAMPLING="subsampling"
     ROLL="roll"
+    CONCATENATE = "concatenate"
 
 class LSTM_TYPE:
     CUDNN= "cudnn_lstm"
@@ -116,6 +134,7 @@ class CONFIG_TAGS_TEST:
     DATA_DIR = "data_dir"
     RESULTS_DIR = "results_dir"
     SUBSAMPLED_UTT = "subsampled_utt"
+    VERIFY_FILE = "verify_file"
 
     #train configuration
     EVAL_CONFIG_FILE = "eval_config_file"
@@ -127,6 +146,7 @@ class CONFIG_TAGS_TEST:
     USE_PRIORS = "use_priors"
     COMPUTE_TER = "compute_ter"
     COUNT_AUGMENT = "count_augment"
+    ALTERNATIVES = "alternatives"
 
 
 class LOG_TAGS:
