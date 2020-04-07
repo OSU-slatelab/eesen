@@ -1,0 +1,1 @@
+/data/data4/scratch/plantingap/wsj/s5/steps/train_mono.sh
